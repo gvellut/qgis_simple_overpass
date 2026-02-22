@@ -490,6 +490,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
     def _on_visibility_changed(self, visible: bool) -> None:
         if not visible:
             self.renderer.clear_feature()
+            self.renderer.clear_clicked_point()
 
     def _selected_feature(self) -> OsmFeature | None:
         item = self._selected_item()

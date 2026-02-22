@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from qgis.core import (
     Qgis,
-    QgsApplication,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
     QgsPointXY,
@@ -20,10 +19,10 @@ class SimpleOverpassMapTool(QgsMapTool):
         self.results_dock = results_dock
         self.setAction(action)
 
-        try:
-            self.setCursor(QgsApplication.getThemeCursor(QgsApplication.Cursor.Identify))
-        except Exception:
-            self.setCursor(Qt.CursorShape.CrossCursor)
+        # try:
+        #     self.setCursor(QgsApplication.getThemeCursor(QgsApplication.Cursor.Identify))
+        # except Exception:
+        self.setCursor(Qt.CursorShape.CrossCursor)
 
     def activate(self):
         super().activate()

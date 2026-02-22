@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
 
 TITLE_RULES = {
-    "building": "building: {building}",
-    "highway": "highway: {highway}",
-    "amenity": "amenity: {amenity}",
+    # "building": "building: {building}",
+    # "highway": "highway: {highway}",
+    # "amenity": "amenity: {amenity}",
 }
 
 

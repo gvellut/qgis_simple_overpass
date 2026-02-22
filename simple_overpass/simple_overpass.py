@@ -66,10 +66,6 @@ class SimpleOverpassPlugin:
 
         self.iface.addWebToolBarIcon(self.tool_action)
 
-        # User requested a plugin toolbar icon in addition to the Web menu entry.
-        self.iface.addToolBarIcon(self.tool_action)
-        self._added_plugin_toolbar_icon = True
-
         self.options_factory = SimpleOverpassOptionsWidgetFactory(icon_path)
         self.iface.registerOptionsWidgetFactory(self.options_factory)
 
