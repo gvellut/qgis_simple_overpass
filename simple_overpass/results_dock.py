@@ -322,8 +322,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
 
         self._remove_loading_item(section)
         prepared = [e for e in elements if isinstance(e, dict)]
-        if section == "enclosing":
-            prepared.sort(key=_raw_bounds_area)
+        prepared.sort(key=_raw_bbox_area_id_sort_key)
 
         self._section_queues[section].extend(prepared)
         self._schedule_section_processing(request_id, section)
@@ -818,13 +817,81 @@ def _string_attr(value) -> str | None:
     return str(value)
 
 
-def _raw_bounds_area(raw: dict) -> float:
-    bounds = raw.get("bounds")
-    if not isinstance(bounds, dict):
-        return float("inf")
+def _raw_bbox_area_id_sort_key(raw: dict) -> tuple[float, int, int, str]:
+    area = _raw_bbox_area(raw)
+    raw_id = raw.get("id", raw.get("ref", ""))
     try:
-        width = float(bounds["maxlon"]) - float(bounds["minlon"])
-        height = float(bounds["maxlat"]) - float(bounds["minlat"])
+        numeric_id = int(raw_id)
     except Exception:
-        return float("inf")
-    return max(0.0, width) * max(0.0, height)
+        return (area, 1, 0, str(raw_id))
+    return (area, 0, numeric_id, "")
+
+
+def _raw_bbox_area(raw: dict) -> float:
+    bounds = raw.get("bounds")
+    if isinstance(bounds, dict):
+        area = _area_from_bounds_dict(bounds)
+        if area is not None:
+            return area
+
+    geometry = raw.get("geometry")
+    if isinstance(geometry, list) and geometry:
+        area = _area_from_geometry_coords(geometry)
+        if area is not None:
+            return area
+
+    center = raw.get("center")
+    if isinstance(center, dict):
+        point = _point_from_lon_lat_dict(center)
+        if point is not None:
+            return 0.0
+
+    point = _point_from_lon_lat_dict(raw)
+    if point is not None:
+        return 0.0
+
+    return float("inf")
+
+
+def _area_from_bounds_dict(bounds: dict) -> float | None:
+    try:
+        minlon = float(bounds["minlon"])
+        minlat = float(bounds["minlat"])
+        maxlon = float(bounds["maxlon"])
+        maxlat = float(bounds["maxlat"])
+    except Exception:
+        return None
+    return max(0.0, maxlon - minlon) * max(0.0, maxlat - minlat)
+
+
+def _area_from_geometry_coords(geometry: list) -> float | None:
+    minlon = minlat = maxlon = maxlat = None
+    found = False
+    for coord in geometry:
+        if not isinstance(coord, dict):
+            continue
+        point = _point_from_lon_lat_dict(coord)
+        if point is None:
+            continue
+        lon, lat = point
+        if not found:
+            minlon = maxlon = lon
+            minlat = maxlat = lat
+            found = True
+            continue
+        minlon = min(minlon, lon)
+        minlat = min(minlat, lat)
+        maxlon = max(maxlon, lon)
+        maxlat = max(maxlat, lat)
+
+    if not found:
+        return None
+    assert None not in (minlon, minlat, maxlon, maxlat)
+    return max(0.0, maxlon - minlon) * max(0.0, maxlat - minlat)
+
+
+def _point_from_lon_lat_dict(value: dict) -> tuple[float, float] | None:
+    try:
+        return (float(value["lon"]), float(value["lat"]))
+    except Exception:
+        return None
