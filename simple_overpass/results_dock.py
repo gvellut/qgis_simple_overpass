@@ -269,8 +269,12 @@ class SimpleOverpassResultsDock(QgsDockWidget):
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.setColumnCount(2)
         self.tree.setHeaderLabels([self.tr("Feature/Key"), self.tr("Value")])
-        self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.tree.header().setStretchLastSection(True)
+        self.tree.header().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Interactive
+        )
+        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.tree.header().setStretchLastSection(False)
+        self.tree.setColumnWidth(0, 180)
         self.tree.itemSelectionChanged.connect(self._on_selection_changed)
         self.tree.customContextMenuRequested.connect(self._open_context_menu)
         self.tree.copyShortcutRequested.connect(self._copy_from_selection)
@@ -861,11 +865,13 @@ def _area_from_bounds_dict(bounds: dict) -> float | None:
         maxlat = float(bounds["maxlat"])
     except Exception:
         return None
-    return max(0.0, maxlon - minlon) * max(0.0, maxlat - minlat)
+    width = _wrapped_longitude_span(minlon, maxlon)
+    return width * max(0.0, maxlat - minlat)
 
 
 def _area_from_geometry_coords(geometry: list) -> float | None:
-    minlon = minlat = maxlon = maxlat = None
+    minlat = maxlat = None
+    longitudes: list[float] = []
     found = False
     for coord in geometry:
         if not isinstance(coord, dict):
@@ -874,20 +880,19 @@ def _area_from_geometry_coords(geometry: list) -> float | None:
         if point is None:
             continue
         lon, lat = point
+        longitudes.append(lon)
         if not found:
-            minlon = maxlon = lon
             minlat = maxlat = lat
             found = True
             continue
-        minlon = min(minlon, lon)
         minlat = min(minlat, lat)
-        maxlon = max(maxlon, lon)
         maxlat = max(maxlat, lat)
 
     if not found:
         return None
-    assert None not in (minlon, minlat, maxlon, maxlat)
-    return max(0.0, maxlon - minlon) * max(0.0, maxlat - minlat)
+    assert None not in (minlat, maxlat)
+    width = _minimal_circular_longitude_span(longitudes)
+    return width * max(0.0, maxlat - minlat)
 
 
 def _point_from_lon_lat_dict(value: dict) -> tuple[float, float] | None:
@@ -895,3 +900,31 @@ def _point_from_lon_lat_dict(value: dict) -> tuple[float, float] | None:
         return (float(value["lon"]), float(value["lat"]))
     except Exception:
         return None
+
+
+def _wrapped_longitude_span(minlon: float, maxlon: float) -> float:
+    if maxlon >= minlon:
+        return max(0.0, maxlon - minlon)
+    # Overpass `bb` can wrap across the antimeridian (e.g. maxlon < minlon).
+    return max(0.0, (maxlon + 360.0) - minlon)
+
+
+def _minimal_circular_longitude_span(longitudes: list[float]) -> float:
+    if not longitudes:
+        return 0.0
+    if len(longitudes) == 1:
+        return 0.0
+
+    normalized = sorted(((lon + 180.0) % 360.0) for lon in longitudes)
+    largest_gap = 0.0
+    for idx in range(len(normalized)):
+        cur = normalized[idx]
+        nxt = normalized[(idx + 1) % len(normalized)]
+        if idx == len(normalized) - 1:
+            nxt += 360.0
+        largest_gap = max(largest_gap, nxt - cur)
+
+    span = 360.0 - largest_gap
+    if span < 0.0:
+        return 0.0
+    return span
