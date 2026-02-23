@@ -3,7 +3,7 @@
 
 Simple Overpass is a small QGIS plugin that lets you click on the map and retrieve OpenStreetMap (OSM) objects around that location using the Overpass API (similar to the “Query Features” tool on openstreetmap.org).
 
-It is very similar to the QGIS OSM Info plugin /Users/guilhem/Documents/projects/___cloned/qgis_osminfo but with additional config + queries + optimised display of the info.
+It is very similar to the [QGIS OSM Info plugin](https://github.com/nextgis/qgis_osminfo) but with additional config + queries + optimised display of the info.
 
 The results are shown in a dock panel, grouped into:
 
@@ -77,20 +77,21 @@ Open settings via **Web → Simple Overpass → Settings** (or QGIS **Settings �
 
 ## Development
 
-The unit tests in this repo focus on query string generation and do not require QGIS.
+### VSCode settings
 
-```bash
-python -m pip install -U pip pytest
-PYTHONPATH=. pytest
+Add this to get PyQGIS autocomplete:
+
+```json
+    "python.analysis.extraPaths": [
+        "/Applications/QGIS.app/Contents/Resources/python3.11/site-packages",
+    ],
+    "python.autoComplete.extraPaths": [
+        "/Applications/QGIS.app/Contents/Resources/python3.11/site-packages",
+    ]
 ```
 
-If you use Ruff (optional):
+TODO test qgis-stubs
 
-```bash
-python -m pip install ruff
-ruff check .
-```
+## License
 
-## Disclaimer
-
-This plugin is not affiliated with OpenStreetMap. Please be considerate with Overpass API usage and follow the endpoint’s fair-use policies.
+GPL v3 or later.
