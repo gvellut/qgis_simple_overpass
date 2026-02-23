@@ -92,6 +92,10 @@ Add this to get PyQGIS autocomplete:
 
 TODO test qgis-stubs
 
+## Disclaimer
+
+This plugin is not affiliated with OpenStreetMap. Please be considerate with Overpass API usage and follow the endpoint’s fair-use policies.
+
 ## License
 
 GPL v3 or later.
