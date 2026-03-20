@@ -1,8 +1,9 @@
 [project]
 name = "qgis-simple-overpass"
 version = "0.1.0"
-description = "Add your description here"
+description = "QGIS plugin to query the Overpass API"
 readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.11"
 dependencies = []
 
