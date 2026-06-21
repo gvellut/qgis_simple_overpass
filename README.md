@@ -42,6 +42,14 @@ Default endpoint: `https://overpass-api.de/api/interpreter`
 
 *Note*: Multiple plugin paths can be passed, separated with `:`
 
+OR if multiple plugins (and no issues with tests folders):
+
+1. Create a directory
+2. Add symbolic links to the root module of each plugin eg `simple_overpass -> /Users/guilhem/dev/projects/github/qgis_simple_overpass/simple_overpass`
+3. Set the env var QGIS_PLUGINPATH to the directory with the links
+4. Restart QGIS.
+5. Enable the pluginss
+
 ## Usage
 
 1. Activate the tool: **Web → Simple Overpass → Query OSM info from Overpass**.
