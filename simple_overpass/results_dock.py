@@ -13,13 +13,11 @@ from qgis.core import (
     QgsProject,
     QgsRectangle,
     QgsVectorLayer,
-    QgsWkbTypes,
 )
 from qgis.gui import QgsDockWidget, QgsRubberBand
-from qgis.PyQt.QtCore import QSettings, Qt, QTimer, QUrl, QVariant, pyqtSignal
-from qgis.PyQt.QtGui import QColor, QDesktopServices, QKeySequence
+from qgis.PyQt.QtCore import QMetaType, QSettings, Qt, QTimer, QUrl, pyqtSignal
+from qgis.PyQt.QtGui import QAction, QColor, QDesktopServices, QKeySequence
 from qgis.PyQt.QtWidgets import (
-    QAction,
     QApplication,
     QHeaderView,
     QLabel,
@@ -40,14 +38,10 @@ TAG_ITEM_TYPE = 1002
 CHUNK_SIZE = 40
 LOG_TAG = "Simple Overpass"
 
-if hasattr(QgsWkbTypes, "PointGeometry"):
-    POINT_GEOM = QgsWkbTypes.PointGeometry
-    LINE_GEOM = QgsWkbTypes.LineGeometry
-    POLYGON_GEOM = QgsWkbTypes.PolygonGeometry
-else:
-    POINT_GEOM = QgsWkbTypes.GeometryType.PointGeometry
-    LINE_GEOM = QgsWkbTypes.GeometryType.LineGeometry
-    POLYGON_GEOM = QgsWkbTypes.GeometryType.PolygonGeometry
+POINT_GEOM = Qgis.GeometryType.Point
+LINE_GEOM = Qgis.GeometryType.Line
+POLYGON_GEOM = Qgis.GeometryType.Polygon
+FIELD_STRING_TYPE = QMetaType.Type.QString
 
 
 class ResultsTreeWidget(QTreeWidget):
@@ -164,8 +158,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
         self.setObjectName("SimpleOverpassResultsDock")
         self.setWindowTitle(title)
         self.setAllowedAreas(
-            Qt.DockWidgetArea.LeftDockWidgetArea
-            | Qt.DockWidgetArea.RightDockWidgetArea
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
 
         self.renderer = MapResultRenderer(iface)
@@ -249,12 +242,6 @@ class SimpleOverpassResultsDock(QgsDockWidget):
         worker.start()
 
     def ensure_visible(self) -> None:
-        if hasattr(self, "setUserVisible"):
-            try:
-                self.setUserVisible(True)
-                return
-            except Exception:
-                pass
         self.show()
         self.raise_()
 
@@ -269,9 +256,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.setColumnCount(2)
         self.tree.setHeaderLabels([self.tr("Feature/Key"), self.tr("Value")])
-        self.tree.header().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Interactive
-        )
+        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.tree.header().setStretchLastSection(False)
         self.tree.setColumnWidth(0, 180)
@@ -414,7 +399,12 @@ class SimpleOverpassResultsDock(QgsDockWidget):
 
         bar = self.iface.messageBar()
         if bar is not None:
-            bar.pushMessage(LOG_TAG, message, level=Qgis.Warning, duration=5)
+            bar.pushMessage(
+                LOG_TAG,
+                message,
+                level=Qgis.MessageLevel.Warning,
+                duration=5,
+            )
 
         if self._feature_count == 0:
             self.tree.clear()
@@ -684,7 +674,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
             return None
 
         provider.addAttributes(
-            [QgsField(str(k), QVariant.String) for k in feature.tags]
+            [QgsField(str(k), FIELD_STRING_TYPE) for k in feature.tags]
         )
         layer.updateFields()
 
@@ -711,7 +701,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
             self.iface.messageBar().pushMessage(
                 LOG_TAG,
                 self.tr("Selected layer geometry type is not compatible."),
-                level=Qgis.Warning,
+                level=Qgis.MessageLevel.Warning,
                 duration=5,
             )
             return
@@ -723,7 +713,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
         missing = [name for name in feature.tags if name not in layer.fields().names()]
         if missing:
             provider.addAttributes(
-                [QgsField(str(name), QVariant.String) for name in missing]
+                [QgsField(str(name), FIELD_STRING_TYPE) for name in missing]
             )
             layer.updateFields()
 
@@ -740,7 +730,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
                 self.iface.messageBar().pushMessage(
                     LOG_TAG,
                     str(exc),
-                    level=Qgis.Warning,
+                    level=Qgis.MessageLevel.Warning,
                     duration=5,
                 )
                 return
@@ -756,7 +746,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
             self.iface.messageBar().pushMessage(
                 LOG_TAG,
                 self.tr("Could not start editing selected layer."),
-                level=Qgis.Warning,
+                level=Qgis.MessageLevel.Warning,
                 duration=5,
             )
             return
@@ -776,7 +766,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
             self.iface.messageBar().pushMessage(
                 LOG_TAG,
                 self.tr("Could not save feature to selected layer."),
-                level=Qgis.Warning,
+                level=Qgis.MessageLevel.Warning,
                 duration=5,
             )
 

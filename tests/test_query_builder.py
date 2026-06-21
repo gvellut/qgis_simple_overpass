@@ -84,7 +84,7 @@ class TestQueryBuilder(unittest.TestCase):
         query = build_nearby_query(settings, self.ctx)
         self.assertIn("[out:json][timeout:30];", query)
         self.assertIn(
-            "nwr(around:15,45.880732,6.052496)[\"highway\"](if:count_tags() > 0);",
+            'nwr(around:15,45.880732,6.052496)["highway"](if:count_tags() > 0);',
             query,
         )
         self.assertIn(

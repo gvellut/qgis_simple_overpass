@@ -39,7 +39,7 @@ class SimpleOverpassMapTool(QgsMapTool):
             self.iface.messageBar().pushMessage(
                 "Simple Overpass",
                 str(exc),
-                level=Qgis.Warning,
+                level=Qgis.MessageLevel.Warning,
                 duration=5,
             )
             return
@@ -55,7 +55,9 @@ class SimpleOverpassMapTool(QgsMapTool):
     def _event_point_to_wgs84(self, event: QgsMapMouseEvent) -> QgsPointXY:
         src_crs = self.canvas.mapSettings().destinationCrs()
         dst_crs = QgsCoordinateReferenceSystem.fromEpsgId(4326)
-        point = self.canvas.getCoordinateTransform().toMapCoordinates(event.pos())
+        point = self.canvas.getCoordinateTransform().toMapCoordinates(
+            event.position().toPoint()
+        )
         transform = QgsCoordinateTransform(src_crs, dst_crs, QgsProject.instance())
         return transform.transform(QgsPointXY(point.x(), point.y()))
 

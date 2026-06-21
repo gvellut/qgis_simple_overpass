@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 [[package]]
 name = "colorama"
@@ -65,7 +65,7 @@ wheels = [
 
 [[package]]
 name = "qgis-simple-overpass"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]

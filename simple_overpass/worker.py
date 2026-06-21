@@ -109,7 +109,7 @@ class OverpassWorker(QThread):
         QgsMessageLog.logMessage(
             f"{label} query to {settings.endpoint}:\n{query}",
             LOG_TAG,
-            level=Qgis.Info,
+            level=Qgis.MessageLevel.Info,
         )
 
     def _debug_count(
@@ -123,5 +123,5 @@ class OverpassWorker(QThread):
         QgsMessageLog.logMessage(
             f"Fetched {len(elements)} {label} elements",
             LOG_TAG,
-            level=Qgis.Info,
+            level=Qgis.MessageLevel.Info,
         )

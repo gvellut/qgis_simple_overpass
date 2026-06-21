@@ -28,7 +28,7 @@ The results are shown in a dock panel, grouped into:
 
 ## Requirements
 
-- QGIS 3.22+ (see plugin metadata in the plugin folder)
+- QGIS 4.x (see plugin metadata in the plugin folder)
 - Network access to an Overpass API endpoint
 
 Default endpoint: `https://overpass-api.de/api/interpreter`
@@ -91,10 +91,10 @@ Add this to get PyQGIS autocomplete:
 
 ```json
     "python.analysis.extraPaths": [
-        "/Applications/QGIS.app/Contents/Resources/python3.11/site-packages",
+        "/Applications/QGIS.app/Contents/Resources/python3.12/site-packages",
     ],
     "python.autoComplete.extraPaths": [
-        "/Applications/QGIS.app/Contents/Resources/python3.11/site-packages",
+        "/Applications/QGIS.app/Contents/Resources/python3.12/site-packages",
     ]
 ```
 

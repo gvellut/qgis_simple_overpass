@@ -38,9 +38,7 @@ def build_nearby_query(settings: QuerySettingsLike, ctx: QueryContext) -> str:
     if settings.only_center:
         out_clause = "out tags center;"
     else:
-        bbox = (
-            f"({fmt(ctx.south)},{fmt(ctx.west)},{fmt(ctx.north)},{fmt(ctx.east)})"
-        )
+        bbox = f"({fmt(ctx.south)},{fmt(ctx.west)},{fmt(ctx.north)},{fmt(ctx.east)})"
         out_clause = f"out tags geom{bbox};"
 
     return "\n".join([prefix, f"{selector};", out_clause])
@@ -66,7 +64,7 @@ def build_enclosing_query(settings: QuerySettingsLike, ctx: QueryContext) -> str
 def build_query_prefix(settings: QuerySettingsLike) -> str:
     parts = ["[out:json]"]
     if settings.date_filter:
-        parts.append(f"[date:\"{settings.date_filter}T00:00:00Z\"]")
+        parts.append(f'[date:"{settings.date_filter}T00:00:00Z"]')
     parts.append(f"[timeout:{settings.timeout}]")
     return "".join(parts) + ";"
 
@@ -97,10 +95,10 @@ def build_tag_filter_clause(raw_filter: str) -> str:
 
     key_escaped = _escape_ql_string(key)
     if value is None:
-        return f"[\"{key_escaped}\"]"
+        return f'["{key_escaped}"]'
 
     value_escaped = _escape_ql_string(value)
-    return f"[\"{key_escaped}\"=\"{value_escaped}\"]"
+    return f'["{key_escaped}"="{value_escaped}"]'
 
 
 def _escape_ql_string(value: str) -> str:

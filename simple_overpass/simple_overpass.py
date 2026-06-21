@@ -4,8 +4,7 @@ import os
 from pathlib import Path
 
 from qgis.PyQt.QtCore import QCoreApplication
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtGui import QAction, QIcon
 
 from .results_dock import SimpleOverpassResultsDock
 from .settings import SimpleOverpassOptionsWidgetFactory

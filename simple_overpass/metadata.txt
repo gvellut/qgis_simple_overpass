@@ -1,8 +1,9 @@
 [general]
 name=Simple Overpass
 description=Simple information getter for OSM data using  the Overpass API (similar to the Query Features tool in openstreetmap.org map)
-version=0.1.0
-qgisMinimumVersion=3.22
+version=0.2.0
+qgisMinimumVersion=4.0
+qgisMaximumVersion=4.99
 author=Guilhem
 email=
 about=Simple Overpass provides a simple way to query the Overpass API
