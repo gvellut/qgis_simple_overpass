@@ -22,7 +22,7 @@ After completing a feature, update this file AGENTS.md with the updated project 
 - `simple_overpass/simple_overpass.py`: plugin lifecycle, actions, menu, toolbar, map tool, dock, and settings registration.
 - `simple_overpass/simple_overpass_tool.py`: map click tool and map-to-WGS84 coordinate conversion.
 - `simple_overpass/results_dock.py`: results dock UI, map highlighting, context menu actions, and saving queried features to layers.
-- `simple_overpass/settings.py`: QGIS options page, provider selection, persisted settings, and immutable per-click query snapshots.
+- `simple_overpass/settings.py`: QGIS options page, provider and User-Agent selection, persisted settings, and immutable per-click query snapshots.
 - `simple_overpass/worker.py`: asynchronous `QueryController`, concurrent section requests, cancellation, and isolated Direct OSM cookie acquisition/refresh through `QgsNetworkAccessManager`.
 - `simple_overpass/query_builder.py`: pure Overpass QL builders.
 - `simple_overpass/osm_elements.py`: Overpass JSON to title, URL, and `QgsGeometry` conversion helpers.
@@ -34,6 +34,7 @@ After completing a feature, update this file AGENTS.md with the updated project 
 ## Request lifecycle considerations
 
 - Overpass remains the default provider. Preserve custom Overpass URLs and the saved historical date when switching providers; Direct OSM queries omit dates.
+- The SimpleOverpass User-Agent is the default. Custom mode starts with an editable Safari preset. Snapshot the effective value for all requests, including cookie fetching; applying an effective User-Agent change resets the session just like changing providers.
 - Network requests are asynchronous Qt replies on the controller's thread. Abort replies on new clicks, connection changes, and unload; invalidate generations before aborting because `finished` can be emitted synchronously.
 - Keep OSM tokens in plugin memory only. Use manual cookie controls on individual requests; never replace or clear QGIS's shared cookie jar, persist tokens, or log their values.
 - Share cookie acquisition and 403 refresh between sections. Retry each forbidden section once, and do not invalidate a newer token because an older request returned 403.

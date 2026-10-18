@@ -34,7 +34,7 @@ class QueryController(QObject):
             else QgsNetworkAccessManager.instance()
         )
         self._generation = 0
-        self._connection: tuple[str, str] | None = None
+        self._connection: tuple[str, str, str] | None = None
         self._token: QNetworkCookie | None = None
         self._token_generation = 0
         self._cookie_reply: QNetworkReply | None = None
@@ -72,7 +72,7 @@ class QueryController(QObject):
         self, request_id: int, context: QueryContext, options: QueryOptions
     ) -> None:
         self.cancel()
-        connection = (options.provider, options.endpoint)
+        connection = (options.provider, options.endpoint, options.user_agent)
         if connection != self._connection:
             self._token = None
             self._connection = connection
@@ -105,7 +105,7 @@ class QueryController(QObject):
 
     def _request(self, url: str) -> QNetworkRequest:
         request = QNetworkRequest(QUrl(url))
-        request.setRawHeader(b"User-Agent", b"SimpleOverpass/0.2.0 (QGIS plugin)")
+        request.setRawHeader(b"User-Agent", self._options.user_agent.encode("utf-8"))
         # Never read or write cookies in QGIS's application-wide cookie jar.
         for attribute in (
             QNetworkRequest.Attribute.CookieLoadControlAttribute,

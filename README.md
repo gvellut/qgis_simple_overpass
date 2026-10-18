@@ -68,6 +68,7 @@ Open settings via **Web → Simple Overpass → Settings** (or QGIS **Settings �
 
 - **Data source**: **Overpass API** (default) or **Direct OSM**. Existing installations keep their configured Overpass URL.
 - **Overpass API endpoint**: URL of the Overpass interpreter endpoint; disabled in Direct OSM mode.
+- **User-Agent**: **SimpleOverpass (default)** sends `SimpleOverpass/0.2.0 (QGIS plugin)`. Select **Custom** to send an editable string, initially prefilled with a generic Safari User-Agent. The selected value is used for both providers and OSM cookie fetching. An empty custom string restores the Safari preset.
 - **Distance**: radius in meters used for the “Nearby features” query.
 - **Timeout**: Overpass timeout in seconds.
 - **Nearby / Enclosing**: enable/disable each section.
@@ -81,7 +82,7 @@ Open settings via **Web → Simple Overpass → Settings** (or QGIS **Settings �
 
 Direct OSM sends queries to `https://query.openstreetmap.org/query-features`. On first use, it anonymously obtains the website's query cookie from `https://www.openstreetmap.org/`. The cookie is kept only in plugin memory, reused until near expiry, and refreshed when needed. A forbidden query triggers one shared cookie refresh and one retry of each affected section. Other failures are shown without automatically switching providers.
 
-Applying a change to the data source or Overpass endpoint cancels active requests and clears results, map highlights, and plugin-owned cookies. Canceling the settings dialog leaves the active session unchanged. QGIS's shared cookie store is not modified.
+Applying a change to the data source, Overpass endpoint, or effective User-Agent cancels active requests and clears results, map highlights, and plugin-owned cookies. Canceling the settings dialog leaves the active session unchanged. QGIS's shared cookie store is not modified.
 
 ## Troubleshooting
 

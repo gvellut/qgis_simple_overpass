@@ -12,7 +12,12 @@ from qgis_test_support import (
 )
 
 from simple_overpass.query_builder import QueryContext
-from simple_overpass.settings import OSM_ENDPOINT, SimpleOverpassSettings
+from simple_overpass.settings import (
+    DEFAULT_CUSTOM_USER_AGENT,
+    DEFAULT_USER_AGENT,
+    OSM_ENDPOINT,
+    SimpleOverpassSettings,
+)
 from simple_overpass.worker import QueryController
 
 CONTEXT = QueryContext(
@@ -81,6 +86,27 @@ class TestQueryController(QgisTestCase):
         self.start(global_tag_filter="name=A&B + café=1")
         query = parse_qs(self.network.posts[0].post_body.decode())["data"][0]
         self.assertIn('["name"="A&B + café=1"]', query)
+
+    def test_user_agent_applies_to_both_providers_and_cookie_fetch(self):
+        for agent in [DEFAULT_USER_AGENT, DEFAULT_CUSTOM_USER_AGENT, "MyClient/1.0"]:
+            for provider in ["overpass", "osm"]:
+                with self.subTest(agent=agent, provider=provider):
+                    self.controller.reset()
+                    previous_gets = len(self.network.gets)
+                    previous_posts = len(self.network.posts)
+                    self.start(provider, user_agent=agent)
+                    if provider == "osm":
+                        self.network.gets[-1].complete(cookies=[token_cookie()])
+                    replies = (
+                        self.network.gets[previous_gets:]
+                        + self.network.posts[previous_posts:]
+                    )
+                    self.assertEqual(len(replies), 3 if provider == "osm" else 2)
+                    for reply in replies:
+                        self.assertEqual(
+                            bytes(reply.request.rawHeader(b"User-Agent")),
+                            agent.encode(),
+                        )
 
     def test_one_bootstrap_shared_by_sections_and_cookie_reused(self):
         self.start("osm")

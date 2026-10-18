@@ -22,6 +22,11 @@ from qgis.PyQt.QtWidgets import (
 
 DEFAULT_ENDPOINT = "https://overpass-api.de/api/interpreter"
 OSM_ENDPOINT = "https://query.openstreetmap.org/query-features"
+DEFAULT_USER_AGENT = "SimpleOverpass/0.2.0 (QGIS plugin)"
+DEFAULT_CUSTOM_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+)
 SETTINGS_ROOT = "SimpleOverpass"
 
 
@@ -38,6 +43,7 @@ class QueryOptions:
     date_filter: str
     global_tag_filter: str
     only_center: bool
+    user_agent: str = DEFAULT_USER_AGENT
 
     @property
     def query_endpoint(self) -> str:
@@ -75,6 +81,37 @@ class SimpleOverpassSettings:
             date_filter=self.date_filter if self.provider == "overpass" else "",
             global_tag_filter=self.global_tag_filter,
             only_center=self.only_center,
+            user_agent=self.user_agent,
+        )
+
+    @property
+    def use_custom_user_agent(self) -> bool:
+        return self._settings.value(
+            self._key("use_custom_user_agent"), False, type=bool
+        )
+
+    @use_custom_user_agent.setter
+    def use_custom_user_agent(self, value: bool) -> None:
+        self._settings.setValue(self._key("use_custom_user_agent"), bool(value))
+
+    @property
+    def custom_user_agent(self) -> str:
+        value = self._settings.value(
+            self._key("custom_user_agent"), DEFAULT_CUSTOM_USER_AGENT, type=str
+        )
+        return " ".join((value or "").split()) or DEFAULT_CUSTOM_USER_AGENT
+
+    @custom_user_agent.setter
+    def custom_user_agent(self, value: str) -> None:
+        self._settings.setValue(
+            self._key("custom_user_agent"),
+            " ".join((value or "").split()) or DEFAULT_CUSTOM_USER_AGENT,
+        )
+
+    @property
+    def user_agent(self) -> str:
+        return (
+            self.custom_user_agent if self.use_custom_user_agent else DEFAULT_USER_AGENT
         )
 
     @property
@@ -218,9 +255,15 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
 
     def apply(self) -> None:
         settings = SimpleOverpassSettings()
-        previous_connection = (settings.provider, settings.endpoint)
+        previous_connection = (
+            settings.provider,
+            settings.endpoint,
+            settings.user_agent,
+        )
         settings.provider = self.provider_combo.currentData()
         settings.endpoint = self.endpoint_edit.text()
+        settings.use_custom_user_agent = self.user_agent_combo.currentData()
+        settings.custom_user_agent = self.custom_user_agent_edit.text()
         settings.distance = self.distance_spin.value()
         settings.timeout = self.timeout_spin.value()
         settings.fetch_nearby = self.nearby_checkbox.isChecked()
@@ -235,7 +278,11 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
         else:
             settings.date_filter = ""
 
-        if previous_connection != (settings.provider, settings.endpoint):
+        if previous_connection != (
+            settings.provider,
+            settings.endpoint,
+            settings.user_agent,
+        ):
             self.connection_changed.emit()
 
     def cancel(self) -> None:
@@ -266,6 +313,21 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
         )
         self.osm_hint.setWordWrap(True)
         form.addRow(self.osm_hint)
+
+        self.user_agent_combo = QComboBox(container)
+        self.user_agent_combo.addItem(self.tr("SimpleOverpass (default)"), False)
+        self.user_agent_combo.addItem(self.tr("Custom"), True)
+        self.user_agent_combo.setToolTip(DEFAULT_USER_AGENT)
+        form.addRow(self.tr("User-Agent"), self.user_agent_combo)
+
+        self.custom_user_agent_edit = QLineEdit(container)
+        self.custom_user_agent_edit.setPlaceholderText(DEFAULT_CUSTOM_USER_AGENT)
+        form.addRow(self.tr("Custom User-Agent"), self.custom_user_agent_edit)
+        self.user_agent_combo.currentIndexChanged.connect(
+            lambda: self.custom_user_agent_edit.setEnabled(
+                self.user_agent_combo.currentData()
+            )
+        )
 
         self.distance_spin = QSpinBox(container)
         self.distance_spin.setRange(1, 1_000_000)
@@ -343,6 +405,11 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
             self.provider_combo.findData(settings.provider)
         )
         self.endpoint_edit.setText(settings.endpoint)
+        self.user_agent_combo.setCurrentIndex(
+            self.user_agent_combo.findData(settings.use_custom_user_agent)
+        )
+        self.custom_user_agent_edit.setText(settings.custom_user_agent)
+        self.custom_user_agent_edit.setEnabled(settings.use_custom_user_agent)
         self.distance_spin.setValue(settings.distance)
         self.timeout_spin.setValue(settings.timeout)
         self.nearby_checkbox.setChecked(settings.fetch_nearby)

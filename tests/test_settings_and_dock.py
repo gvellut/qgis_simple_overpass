@@ -15,7 +15,9 @@ from qgis_test_support import (
 
 from simple_overpass.results_dock import CHUNK_SIZE, SimpleOverpassResultsDock
 from simple_overpass.settings import (
+    DEFAULT_CUSTOM_USER_AGENT,
     DEFAULT_ENDPOINT,
+    DEFAULT_USER_AGENT,
     SimpleOverpassOptionsPageWidget,
     SimpleOverpassOptionsWidgetFactory,
     SimpleOverpassSettings,
@@ -33,6 +35,50 @@ BBOX = (45.71, 6.56, 45.73, 6.58)
 
 
 class TestSettings(QgisTestCase):
+    def test_user_agent_selection_persists_and_resets_effective_identity(self):
+        settings = SimpleOverpassSettings()
+        page = SimpleOverpassOptionsPageWidget()
+        reset = Mock()
+        page.connection_changed.connect(reset)
+        self.assertEqual(settings.snapshot().user_agent, DEFAULT_USER_AGENT)
+        self.assertFalse(page.custom_user_agent_edit.isEnabled())
+        self.assertEqual(page.custom_user_agent_edit.text(), DEFAULT_CUSTOM_USER_AGENT)
+        page.user_agent_combo.setCurrentIndex(1)
+        self.assertTrue(page.custom_user_agent_edit.isEnabled())
+        page.custom_user_agent_edit.setText("MyClient/1.0")
+        page.apply()
+        self.assertEqual(settings.snapshot().user_agent, "MyClient/1.0")
+        reset.assert_called_once()
+        page.deleteLater()
+
+        reopened = SimpleOverpassOptionsPageWidget()
+        reopened.connection_changed.connect(reset)
+        self.assertTrue(reopened.user_agent_combo.currentData())
+        self.assertEqual(reopened.custom_user_agent_edit.text(), "MyClient/1.0")
+        reopened.user_agent_combo.setCurrentIndex(0)
+        reopened.apply()
+        self.assertEqual(reset.call_count, 2)
+        self.assertEqual(settings.snapshot().user_agent, DEFAULT_USER_AGENT)
+        self.assertEqual(settings.custom_user_agent, "MyClient/1.0")
+        reopened.deleteLater()
+
+    def test_cancel_user_agent_change_and_empty_custom_value(self):
+        settings = SimpleOverpassSettings()
+        page = SimpleOverpassOptionsPageWidget()
+        reset = Mock()
+        page.connection_changed.connect(reset)
+        page.user_agent_combo.setCurrentIndex(1)
+        page.custom_user_agent_edit.setText("Canceled/1.0")
+        page.cancel()
+        self.assertEqual(settings.user_agent, DEFAULT_USER_AGENT)
+        self.assertEqual(settings.custom_user_agent, DEFAULT_CUSTOM_USER_AGENT)
+        reset.assert_not_called()
+        page.custom_user_agent_edit.clear()
+        page.apply()
+        self.assertEqual(settings.user_agent, DEFAULT_CUSTOM_USER_AGENT)
+        reset.assert_called_once()
+        page.deleteLater()
+
     def test_provider_defaults_and_legacy_custom_url(self):
         settings = SimpleOverpassSettings()
         self.assertEqual(settings.provider, "overpass")
@@ -225,6 +271,27 @@ class TestResultsDock(QgisTestCase):
         self.assertFalse(self.dock._pending_sections)
         self.assertIn("Click the map", self.dock.status_label.text())
         self.dock.renderer.cleanup.assert_called()
+        page.deleteLater()
+
+    def test_apply_user_agent_change_clears_active_osm_session(self):
+        settings = SimpleOverpassSettings()
+        settings.provider = "osm"
+        self.start()
+        self.network.gets[0].complete(cookies=[token_cookie()])
+        old_replies = self.network.posts[:]
+        page = SimpleOverpassOptionsPageWidget()
+        page.connection_changed.connect(self.dock.reset_connection)
+        page.user_agent_combo.setCurrentIndex(1)
+        page.apply()
+        self.assertTrue(all(reply.aborted for reply in old_replies))
+        self.assertIsNone(self.dock.controller._token)
+        self.assertEqual(self.dock.tree.topLevelItemCount(), 0)
+        self.start()
+        self.assertEqual(len(self.network.gets), 2)
+        self.assertEqual(
+            bytes(self.network.gets[-1].request.rawHeader(b"User-Agent")),
+            DEFAULT_CUSTOM_USER_AGENT.encode(),
+        )
         page.deleteLater()
 
     def test_unload_aborts_replies_without_warnings(self):
