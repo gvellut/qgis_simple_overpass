@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from qgis.core import QgsSettings
 from qgis.gui import QgsOptionsPageWidget, QgsOptionsWidgetFactory
-from qgis.PyQt.QtCore import QDate, Qt
+from qgis.PyQt.QtCore import QDate, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDateEdit,
     QFormLayout,
     QHBoxLayout,
@@ -19,7 +21,27 @@ from qgis.PyQt.QtWidgets import (
 )
 
 DEFAULT_ENDPOINT = "https://overpass-api.de/api/interpreter"
+OSM_ENDPOINT = "https://query.openstreetmap.org/query-features"
 SETTINGS_ROOT = "SimpleOverpass"
+
+
+@dataclass(frozen=True)
+class QueryOptions:
+    provider: str
+    endpoint: str
+    distance: int
+    timeout: int
+    fetch_nearby: bool
+    fetch_enclosing: bool
+    debug_enabled: bool
+    only_with_tags: bool
+    date_filter: str
+    global_tag_filter: str
+    only_center: bool
+
+    @property
+    def query_endpoint(self) -> str:
+        return OSM_ENDPOINT if self.provider == "osm" else self.endpoint
 
 
 class SimpleOverpassSettings:
@@ -28,6 +50,32 @@ class SimpleOverpassSettings:
 
     def _key(self, name: str) -> str:
         return f"{SETTINGS_ROOT}/{name}"
+
+    @property
+    def provider(self) -> str:
+        value = self._settings.value(self._key("provider"), "overpass", type=str)
+        return value if value in {"overpass", "osm"} else "overpass"
+
+    @provider.setter
+    def provider(self, value: str) -> None:
+        self._settings.setValue(
+            self._key("provider"), value if value in {"overpass", "osm"} else "overpass"
+        )
+
+    def snapshot(self) -> QueryOptions:
+        return QueryOptions(
+            provider=self.provider,
+            endpoint=self.endpoint,
+            distance=self.distance,
+            timeout=self.timeout,
+            fetch_nearby=self.fetch_nearby,
+            fetch_enclosing=self.fetch_enclosing,
+            debug_enabled=self.debug_enabled,
+            only_with_tags=self.only_with_tags,
+            date_filter=self.date_filter if self.provider == "overpass" else "",
+            global_tag_filter=self.global_tag_filter,
+            only_center=self.only_center,
+        )
 
     @property
     def endpoint(self) -> str:
@@ -161,6 +209,8 @@ class SimpleOverpassSettings:
 
 
 class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
+    connection_changed = pyqtSignal()
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._build_ui()
@@ -168,6 +218,8 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
 
     def apply(self) -> None:
         settings = SimpleOverpassSettings()
+        previous_connection = (settings.provider, settings.endpoint)
+        settings.provider = self.provider_combo.currentData()
         settings.endpoint = self.endpoint_edit.text()
         settings.distance = self.distance_spin.value()
         settings.timeout = self.timeout_spin.value()
@@ -183,6 +235,9 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
         else:
             settings.date_filter = ""
 
+        if previous_connection != (settings.provider, settings.endpoint):
+            self.connection_changed.emit()
+
     def cancel(self) -> None:
         pass
 
@@ -194,9 +249,23 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
         form = QFormLayout(container)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
+        self.provider_combo = QComboBox(container)
+        self.provider_combo.addItem(self.tr("Overpass API"), "overpass")
+        self.provider_combo.addItem(self.tr("Direct OSM"), "osm")
+        form.addRow(self.tr("Data source"), self.provider_combo)
+
         self.endpoint_edit = QLineEdit(container)
         self.endpoint_edit.setPlaceholderText(DEFAULT_ENDPOINT)
         form.addRow(self.tr("Overpass API endpoint"), self.endpoint_edit)
+
+        self.osm_hint = QLabel(
+            self.tr("Direct OSM uses {url}. Historical dates require Overpass.").format(
+                url=OSM_ENDPOINT
+            ),
+            container,
+        )
+        self.osm_hint.setWordWrap(True)
+        form.addRow(self.osm_hint)
 
         self.distance_spin = QSpinBox(container)
         self.distance_spin.setRange(1, 1_000_000)
@@ -234,7 +303,7 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
         self.date_edit.setDisplayFormat("yyyy-MM-dd")
         self.date_edit.setDate(QDate.currentDate())
         self.date_edit.setEnabled(False)
-        self.date_enabled_checkbox.toggled.connect(self.date_edit.setEnabled)
+        self.date_enabled_checkbox.toggled.connect(self._update_provider_controls)
 
         date_layout.addWidget(self.date_enabled_checkbox)
         date_layout.addWidget(self.date_edit, 1)
@@ -259,9 +328,20 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
         root.addWidget(container)
         root.addWidget(hint)
         root.addStretch(1)
+        self.provider_combo.currentIndexChanged.connect(self._update_provider_controls)
+
+    def _update_provider_controls(self) -> None:
+        overpass = self.provider_combo.currentData() == "overpass"
+        self.endpoint_edit.setEnabled(overpass)
+        self.date_enabled_checkbox.setEnabled(overpass)
+        self.date_edit.setEnabled(overpass and self.date_enabled_checkbox.isChecked())
+        self.osm_hint.setVisible(not overpass)
 
     def _load_settings(self) -> None:
         settings = SimpleOverpassSettings()
+        self.provider_combo.setCurrentIndex(
+            self.provider_combo.findData(settings.provider)
+        )
         self.endpoint_edit.setText(settings.endpoint)
         self.distance_spin.setValue(settings.distance)
         self.timeout_spin.setValue(settings.timeout)
@@ -284,6 +364,7 @@ class SimpleOverpassOptionsPageWidget(QgsOptionsPageWidget):
         else:
             self.date_enabled_checkbox.setChecked(False)
             self.date_edit.setEnabled(False)
+        self._update_provider_controls()
 
 
 class SimpleOverpassOptionsErrorPageWidget(QgsOptionsPageWidget):
@@ -303,6 +384,8 @@ class SimpleOverpassOptionsErrorPageWidget(QgsOptionsPageWidget):
 
 
 class SimpleOverpassOptionsWidgetFactory(QgsOptionsWidgetFactory):
+    connection_changed = pyqtSignal()
+
     def __init__(self, icon_path: str | None = None) -> None:
         self._icon = QIcon(icon_path) if icon_path else QIcon()
         super().__init__("Simple Overpass", self._icon)
@@ -318,7 +401,9 @@ class SimpleOverpassOptionsWidgetFactory(QgsOptionsWidgetFactory):
         parent: QWidget | None = None,
     ) -> QgsOptionsPageWidget | None:
         try:
-            return SimpleOverpassOptionsPageWidget(parent)
+            widget = SimpleOverpassOptionsPageWidget(parent)
+            widget.connection_changed.connect(self.connection_changed)
+            return widget
         except Exception:
             return SimpleOverpassOptionsErrorPageWidget(parent)
 

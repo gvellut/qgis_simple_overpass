@@ -30,8 +30,9 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .osm_elements import OsmFeature
-from .settings import SimpleOverpassSettings
-from .worker import OverpassWorker
+from .query_builder import QueryContext
+from .settings import QueryOptions, SimpleOverpassSettings
+from .worker import QueryController
 
 FEATURE_ITEM_TYPE = 1001
 TAG_ITEM_TYPE = 1002
@@ -163,9 +164,13 @@ class SimpleOverpassResultsDock(QgsDockWidget):
 
         self.renderer = MapResultRenderer(iface)
         self._qgis_locale = self._detect_qgis_locale()
-        self._workers: dict[int, OverpassWorker] = {}
+        self.controller = QueryController(self)
+        self.controller.section_result.connect(self._on_section_result)
+        self.controller.section_warning.connect(self._on_section_warning)
+        self.controller.section_error.connect(self._on_section_error)
+        self.controller.section_done.connect(self._on_section_done)
         self._current_request_id = 0
-        self._worker_done = False
+        self._pending_sections: set[str] = set()
         self._section_items: dict[str, QTreeWidgetItem] = {}
         self._loading_items: dict[str, QTreeWidgetItem] = {}
         self._section_queues: dict[str, deque[dict]] = {
@@ -175,7 +180,7 @@ class SimpleOverpassResultsDock(QgsDockWidget):
         self._section_processing = {"nearby": False, "enclosing": False}
         self._feature_count = 0
         self._section_counts = {"nearby": 0, "enclosing": 0}
-        self._error_message: str | None = None
+        self._section_messages: dict[str, str] = {}
 
         self._build_ui()
 
@@ -186,25 +191,31 @@ class SimpleOverpassResultsDock(QgsDockWidget):
         self.status_label.setText(self.tr("Click the map to query OSM data."))
 
     def cleanup(self) -> None:
-        for worker in list(self._workers.values()):
-            try:
-                worker.section_result.disconnect(self._on_section_result)
-            except Exception:
-                pass
-            try:
-                worker.error.disconnect(self._on_worker_error)
-            except Exception:
-                pass
-            try:
-                worker.done.disconnect(self._on_worker_done)
-            except Exception:
-                pass
-        self._workers.clear()
+        self._current_request_id += 1
+        self.controller.reset()
         self.renderer.cleanup()
 
         main_window = self.iface.mainWindow()
         if isinstance(main_window, QMainWindow):
             main_window.removeDockWidget(self)
+
+    def reset_connection(self) -> None:
+        self._current_request_id += 1
+        self.controller.reset()
+        self._clear_query_state()
+        self.tree.clear()
+        self.renderer.cleanup()
+        self.status_label.setText(self.tr("Click the map to query OSM data."))
+
+    def _clear_query_state(self) -> None:
+        self._pending_sections = set()
+        self._section_messages = {}
+        self._feature_count = 0
+        self._section_counts = {"nearby": 0, "enclosing": 0}
+        self._section_queues = {"nearby": deque(), "enclosing": deque()}
+        self._section_processing = {"nearby": False, "enclosing": False}
+        self._section_items = {}
+        self._loading_items = {}
 
     def show_clicked_point(self, point_wgs) -> None:
         self.renderer.show_clicked_point(point_wgs)
@@ -220,26 +231,32 @@ class SimpleOverpassResultsDock(QgsDockWidget):
     ) -> None:
         self._current_request_id += 1
         request_id = self._current_request_id
-        self._worker_done = False
-        self._error_message = None
-        self._feature_count = 0
-        self._section_counts = {"nearby": 0, "enclosing": 0}
-        self._section_queues = {"nearby": deque(), "enclosing": deque()}
-        self._section_processing = {"nearby": False, "enclosing": False}
-        self._section_items = {}
-        self._loading_items = {}
+        self.controller.cancel()
+        self._clear_query_state()
+        options = SimpleOverpassSettings().snapshot()
+        if options.fetch_nearby:
+            self._pending_sections.add("nearby")
+        if options.fetch_enclosing:
+            self._pending_sections.add("enclosing")
 
         self.renderer.clear_feature()
-        self._reset_tree_for_loading()
+        self._reset_tree_for_loading(options)
+        if not self._pending_sections:
+            self.status_label.setText(
+                self.tr("Enable Nearby and/or Enclosing in settings.")
+            )
+            return
         self._update_status_label()
 
-        worker = OverpassWorker(request_id, lon, lat, bbox_wgs, None)
-        worker.section_result.connect(self._on_section_result)
-        worker.error.connect(self._on_worker_error)
-        worker.done.connect(self._on_worker_done)
-        worker.finished.connect(worker.deleteLater)
-        self._workers[request_id] = worker
-        worker.start()
+        context = QueryContext(
+            lon=lon,
+            lat=lat,
+            south=bbox_wgs[0],
+            west=bbox_wgs[1],
+            north=bbox_wgs[2],
+            east=bbox_wgs[3],
+        )
+        self.controller.start(request_id, context, options)
 
     def ensure_visible(self) -> None:
         self.show()
@@ -282,17 +299,13 @@ class SimpleOverpassResultsDock(QgsDockWidget):
             locale = settings.value("locale/userLocale", "", type=str) or ""
         return locale[:2]
 
-    def _reset_tree_for_loading(self) -> None:
+    def _reset_tree_for_loading(self, settings: QueryOptions) -> None:
         self.tree.clear()
 
-        settings = SimpleOverpassSettings()
         if settings.fetch_nearby:
             self._add_section("nearby", self.tr("Nearby features"))
         if settings.fetch_enclosing:
             self._add_section("enclosing", self.tr("Is inside"))
-
-        if not self._section_items:
-            self.tree.addTopLevelItem(QTreeWidgetItem([self.tr("Loading...")]))
 
     def _add_section(self, section: str, label: str) -> None:
         item = QTreeWidgetItem([label, ""])
@@ -337,7 +350,6 @@ class SimpleOverpassResultsDock(QgsDockWidget):
 
     def _process_section_chunk(self, request_id: int, section: str) -> None:
         if request_id != self._current_request_id:
-            self._section_processing[section] = False
             return
 
         queue = self._section_queues[section]
@@ -389,67 +401,76 @@ class SimpleOverpassResultsDock(QgsDockWidget):
                 "" if value is None else str(value),
             )
 
-    def _on_worker_error(self, request_id: int, message: str) -> None:
-        self._workers.pop(request_id, None)
+    def _on_section_warning(self, request_id: int, section: str, message: str) -> None:
+        self._show_section_message(request_id, section, message, self.tr("Warning"))
+
+    def _on_section_error(self, request_id: int, section: str, message: str) -> None:
+        self._show_section_message(request_id, section, message, self.tr("Error"))
+
+    def _show_section_message(
+        self, request_id: int, section: str, message: str, label: str
+    ) -> None:
         if request_id != self._current_request_id:
             return
-
-        self._error_message = message
+        parent = self._section_items.get(section)
+        if parent is None:
+            return
+        self._remove_loading_item(section)
+        self._section_messages[section] = message
+        QTreeWidgetItem(parent, [f"{label}: {message}", ""])
         self._update_status_label()
 
         bar = self.iface.messageBar()
         if bar is not None:
             bar.pushMessage(
                 LOG_TAG,
-                message,
+                f"{parent.text(0)}: {message}",
                 level=Qgis.MessageLevel.Warning,
                 duration=5,
             )
 
-        if self._feature_count == 0:
-            self.tree.clear()
-            self.tree.addTopLevelItem(QTreeWidgetItem([message, ""]))
-        else:
-            self.tree.addTopLevelItem(QTreeWidgetItem([f"Error: {message}", ""]))
-
-    def _on_worker_done(self, request_id: int) -> None:
-        self._workers.pop(request_id, None)
+    def _on_section_done(self, request_id: int, section: str) -> None:
         if request_id != self._current_request_id:
             return
-        self._worker_done = True
+        self._pending_sections.discard(section)
+        self._remove_loading_item(section)
         self._update_status_label()
         self._finalize_if_idle()
 
     def _finalize_if_idle(self) -> None:
-        if not self._worker_done:
+        if self._pending_sections:
             return
         if any(self._section_processing.values()):
             return
         if any(self._section_queues[section] for section in self._section_queues):
             return
 
-        if self._feature_count == 0 and not self._error_message:
-            self.tree.clear()
-            self.tree.addTopLevelItem(
-                QTreeWidgetItem([self.tr("No features found"), ""])
-            )
+        for section, item in self._section_items.items():
+            if item.childCount() == 0 and section not in self._section_messages:
+                QTreeWidgetItem(item, [self.tr("No features found"), ""])
         self._update_status_label()
 
     def _update_status_label(self) -> None:
-        if self._error_message:
-            if self._feature_count > 0:
-                self.status_label.setText(
-                    self.tr("Partial results. Last error: {msg}").format(
-                        msg=self._error_message
-                    )
-                )
-            else:
-                self.status_label.setText(self._error_message)
-            return
-
         nearby_count = self._section_counts["nearby"]
         enclosing_count = self._section_counts["enclosing"]
-        loading = not self._worker_done or any(self._section_processing.values())
+        loading = bool(self._pending_sections) or any(self._section_processing.values())
+        if self._section_messages:
+            summary = (
+                self.tr("Partial results")
+                if self._feature_count
+                else self.tr("Query warnings/errors")
+            )
+            if loading:
+                summary = self.tr("Loading… {summary}").format(summary=summary)
+            self.status_label.setText(
+                self.tr("{summary}. Nearby: {n}, Is inside: {e}. {messages}").format(
+                    summary=summary,
+                    n=nearby_count,
+                    e=enclosing_count,
+                    messages="; ".join(self._section_messages.values()),
+                )
+            )
+            return
         if loading:
             self.status_label.setText(
                 self.tr("Loading… Nearby: {n}, Is inside: {e}").format(

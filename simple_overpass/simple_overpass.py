@@ -33,7 +33,7 @@ class SimpleOverpassPlugin:
 
         self.tool_action = QAction(
             icon,
-            self.tr("Query OSM info from Overpass"),
+            self.tr("Query OSM info"),
             self.iface.mainWindow(),
         )
         self.tool_action.setCheckable(True)
@@ -66,6 +66,9 @@ class SimpleOverpassPlugin:
         self.iface.addWebToolBarIcon(self.tool_action)
 
         self.options_factory = SimpleOverpassOptionsWidgetFactory(icon_path)
+        self.options_factory.connection_changed.connect(
+            self.results_dock.reset_connection
+        )
         self.iface.registerOptionsWidgetFactory(self.options_factory)
 
     def unload(self):
